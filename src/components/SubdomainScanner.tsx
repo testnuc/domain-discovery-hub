@@ -15,68 +15,6 @@ export const SubdomainScanner = () => {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
 
-  const fetchCrtShDomains = async (domain: string) => {
-    try {
-      const response = await fetch(`https://crt.sh/?q=%25.${domain}&output=json`);
-      if (!response.ok) throw new Error('Failed to fetch from crt.sh');
-      const data = await response.json();
-      return data.map((entry: { name_value: string }) => ({
-        domain: entry.name_value.replace('*.', '')
-      }));
-    } catch (error) {
-      console.error("Error fetching from crt.sh:", error);
-      return [];
-    }
-  };
-
-  const fetchHackerTargetDomains = async (domain: string) => {
-    try {
-      const response = await fetch(`https://api.hackertarget.com/hostsearch/?q=${domain}`);
-      if (!response.ok) throw new Error('Failed to fetch from HackerTarget');
-      const text = await response.text();
-      if (!text.trim()) return [];
-      return text.split('\n')
-        .map(line => ({
-          domain: line.split(',')[0]
-        }));
-    } catch (error) {
-      console.error("Error fetching from HackerTarget:", error);
-      return [];
-    }
-  };
-
-  const fetchRapidDnsDomains = async (domain: string) => {
-    try {
-      const response = await fetch(`https://rapiddns.io/subdomain/${domain}?full=1&down=1`);
-      if (!response.ok) throw new Error('Failed to fetch from RapidDNS');
-      const text = await response.text();
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(text, 'text/html');
-      const domains = Array.from(doc.querySelectorAll('td'))
-        .map(td => td.textContent?.trim())
-        .filter(domain => domain && domain.includes('.'))
-        .map(domain => ({ domain: domain || '' }));
-      return domains;
-    } catch (error) {
-      console.error("Error fetching from RapidDNS:", error);
-      return [];
-    }
-  };
-
-  const fetchUrlscanDomains = async (domain: string) => {
-    try {
-      const response = await fetch(`https://urlscan.io/api/v1/search/?q=domain:${domain}`);
-      if (!response.ok) throw new Error('Failed to fetch from URLScan');
-      const data = await response.json();
-      return data.results.map((result: { page: { domain: string } }) => ({
-        domain: result.page.domain
-      }));
-    } catch (error) {
-      console.error("Error fetching from URLScan:", error);
-      return [];
-    }
-  };
-
   const storeDomainSearch = async (domain: string) => {
     try {
       await supabase
@@ -101,19 +39,21 @@ export const SubdomainScanner = () => {
       // Store the domain search
       await storeDomainSearch(domain);
 
-      // Fetch from all sources in parallel
-      const [crtResults, hackerTargetResults, rapidDnsResults, urlscanResults] = await Promise.all([
-        fetchCrtShDomains(domain),
-        fetchHackerTargetDomains(domain),
-        fetchRapidDnsDomains(domain),
-        fetchUrlscanDomains(domain)
-      ]);
+      // Fetch subdomains using our Edge Function
+      const response = await fetch('/functions/v1/fetch-subdomains', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ domain })
+      });
 
-      // Combine and deduplicate results
-      const allDomains = [...crtResults, ...hackerTargetResults, ...rapidDnsResults, ...urlscanResults];
-      const uniqueDomains = Array.from(new Set(
-        allDomains.map(d => d.domain)
-      )).map(domain => ({ domain }));
+      if (!response.ok) {
+        throw new Error('Failed to fetch subdomains');
+      }
+
+      const data = await response.json();
+      const uniqueDomains = data.subdomains || [];
 
       if (uniqueDomains.length === 0) {
         toast({ 
