@@ -30,6 +30,15 @@ export const SubdomainScanner = () => {
     }
   };
 
+  const fetchWithProxy = async (url: string) => {
+    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+    const response = await fetch(proxyUrl);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response;
+  };
+
   const scanSubdomains = async () => {
     if (!validateDomain(domain)) {
       toast({
@@ -44,10 +53,10 @@ export const SubdomainScanner = () => {
     setSubdomains([]);
 
     try {
-      // For demo, we'll use crt.sh and hackertarget endpoints
+      // Using proxy for both endpoints
       const [crtResponse, hackertargetResponse] = await Promise.all([
-        fetch(`https://crt.sh/?q=%25.${domain}&output=json`),
-        fetch(`https://api.hackertarget.com/hostsearch/?q=${domain}`),
+        fetchWithProxy(`https://crt.sh/?q=%25.${domain}&output=json`),
+        fetchWithProxy(`https://api.hackertarget.com/hostsearch/?q=${domain}`),
       ]);
 
       const crtData = await crtResponse.json();
@@ -66,6 +75,7 @@ export const SubdomainScanner = () => {
         description: `Found ${allSubdomains.length} subdomains`,
       });
     } catch (error) {
+      console.error('Scanning error:', error);
       toast({
         title: "Error",
         description: "Failed to scan subdomains. Please try again.",
