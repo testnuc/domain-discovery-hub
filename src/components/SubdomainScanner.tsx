@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Heart, Link2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Subdomain {
   domain: string;
@@ -44,6 +45,48 @@ export const SubdomainScanner = () => {
     }
   };
 
+  const fetchRapidDnsDomains = async (domain: string) => {
+    try {
+      const response = await fetch(`https://rapiddns.io/subdomain/${domain}?full=1&down=1`);
+      if (!response.ok) throw new Error('Failed to fetch from RapidDNS');
+      const text = await response.text();
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(text, 'text/html');
+      const domains = Array.from(doc.querySelectorAll('td'))
+        .map(td => td.textContent?.trim())
+        .filter(domain => domain && domain.includes('.'))
+        .map(domain => ({ domain: domain || '' }));
+      return domains;
+    } catch (error) {
+      console.error("Error fetching from RapidDNS:", error);
+      return [];
+    }
+  };
+
+  const fetchUrlscanDomains = async (domain: string) => {
+    try {
+      const response = await fetch(`https://urlscan.io/api/v1/search/?q=domain:${domain}`);
+      if (!response.ok) throw new Error('Failed to fetch from URLScan');
+      const data = await response.json();
+      return data.results.map((result: { page: { domain: string } }) => ({
+        domain: result.page.domain
+      }));
+    } catch (error) {
+      console.error("Error fetching from URLScan:", error);
+      return [];
+    }
+  };
+
+  const storeDomainSearch = async (domain: string) => {
+    try {
+      await supabase
+        .from('domain_searches')
+        .insert([{ domain }]);
+    } catch (error) {
+      console.error("Error storing domain search:", error);
+    }
+  };
+
   const handleScan = async () => {
     if (!domain) {
       toast({ 
@@ -55,13 +98,19 @@ export const SubdomainScanner = () => {
 
     setIsLoading(true);
     try {
-      const [crtResults, hackerTargetResults] = await Promise.all([
+      // Store the domain search
+      await storeDomainSearch(domain);
+
+      // Fetch from all sources in parallel
+      const [crtResults, hackerTargetResults, rapidDnsResults, urlscanResults] = await Promise.all([
         fetchCrtShDomains(domain),
-        fetchHackerTargetDomains(domain)
+        fetchHackerTargetDomains(domain),
+        fetchRapidDnsDomains(domain),
+        fetchUrlscanDomains(domain)
       ]);
 
       // Combine and deduplicate results
-      const allDomains = [...crtResults, ...hackerTargetResults];
+      const allDomains = [...crtResults, ...hackerTargetResults, ...rapidDnsResults, ...urlscanResults];
       const uniqueDomains = Array.from(new Set(
         allDomains.map(d => d.domain)
       )).map(domain => ({ domain }));
