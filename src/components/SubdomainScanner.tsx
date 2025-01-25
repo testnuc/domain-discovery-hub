@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/use-toast";
 import { Loader2, Copy, Heart, Search } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 export const SubdomainScanner = () => {
   const [domain, setDomain] = useState("");
@@ -39,6 +40,19 @@ export const SubdomainScanner = () => {
     return response;
   };
 
+  const storeDomainSearch = async (domain: string) => {
+    try {
+      const { error } = await supabase
+        .from('domain_searches')
+        .insert([{ domain }]);
+      
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error storing domain search:', error);
+      // We don't show this error to the user as it's not critical to the main functionality
+    }
+  };
+
   const scanSubdomains = async () => {
     if (!validateDomain(domain)) {
       toast({
@@ -53,6 +67,9 @@ export const SubdomainScanner = () => {
     setSubdomains([]);
 
     try {
+      // Store the domain search first
+      await storeDomainSearch(domain);
+
       const [crtResponse, hackertargetResponse] = await Promise.all([
         fetchWithProxy(`https://crt.sh/?q=%25.${domain}&output=json`),
         fetchWithProxy(`https://api.hackertarget.com/hostsearch/?q=${domain}`),
