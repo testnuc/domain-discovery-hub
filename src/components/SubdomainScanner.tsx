@@ -44,10 +44,19 @@ export const SubdomainScanner = () => {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
-      return response;
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        return response;
+      } else {
+        const text = await response.text();
+        if (text.trim() === "") {
+          throw new Error("No data found");
+        }
+        return new Response(text);
+      }
     } catch (error) {
       console.error('Proxy fetch error:', error);
-      throw new Error(`Failed to fetch from ${url}`);
+      throw error;
     }
   };
 
@@ -99,25 +108,45 @@ export const SubdomainScanner = () => {
         fetchWithProxy(`https://api.hackertarget.com/hostsearch/?q=${domain}`),
       ]);
 
-      const crtData = await crtResponse.json() as CrtShEntry[];
-      const hackertargetData = await hackertargetResponse.text();
+      let crtSubdomains: string[] = [];
+      let hackertargetSubdomains: string[] = [];
 
-      const crtSubdomains = crtData.map((entry: CrtShEntry) => entry.name_value.replace(/\*\./g, ""));
-      const hackertargetSubdomains = hackertargetData.split("\n").map(line => line.split(",")[0]);
+      try {
+        const crtData = await crtResponse.json() as CrtShEntry[];
+        crtSubdomains = crtData.map((entry: CrtShEntry) => entry.name_value.replace(/\*\./g, ""));
+      } catch (error) {
+        console.warn('Failed to parse crt.sh data:', error);
+      }
 
-      const allSubdomains = [...new Set([...crtSubdomains, ...hackertargetSubdomains])];
+      try {
+        const hackertargetData = await hackertargetResponse.text();
+        if (hackertargetData && !hackertargetData.includes("error") && !hackertargetData.includes("API count exceeded")) {
+          hackertargetSubdomains = hackertargetData.split("\n").map(line => line.split(",")[0]);
+        }
+      } catch (error) {
+        console.warn('Failed to parse hackertarget data:', error);
+      }
+
+      const allSubdomains = [...new Set([...crtSubdomains, ...hackertargetSubdomains])].filter(Boolean).sort();
       
-      setSubdomains(allSubdomains.filter(Boolean).sort());
-      
-      toast({
-        title: "Scan Complete",
-        description: `Found ${allSubdomains.length} subdomains`,
-      });
+      if (allSubdomains.length === 0) {
+        toast({
+          title: "No Subdomains Found",
+          description: "No subdomains were found for this domain. This could mean the domain is not active or our sources have no information about it.",
+          variant: "destructive",
+        });
+      } else {
+        setSubdomains(allSubdomains);
+        toast({
+          title: "Scan Complete",
+          description: `Found ${allSubdomains.length} subdomains`,
+        });
+      }
     } catch (error) {
       console.error('Scanning error:', error);
       toast({
         title: "Error",
-        description: "Failed to scan subdomains. Please try again.",
+        description: "Failed to scan subdomains. Please try again later.",
         variant: "destructive",
       });
     } finally {
