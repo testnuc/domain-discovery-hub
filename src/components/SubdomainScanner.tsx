@@ -7,10 +7,6 @@ import { supabase } from "@/integrations/supabase/client";
 
 interface CrtShEntry {
   name_value: string;
-  common_name?: string;
-  issuer_name?: string;
-  not_before?: string;
-  not_after?: string;
 }
 
 export const SubdomainScanner = () => {
@@ -55,42 +51,25 @@ export const SubdomainScanner = () => {
     }
   };
 
-  const storeDomainSearch = async (domain: string) => {
-    try {
-      const { error } = await supabase
-        .from('domain_searches')
-        .insert([{ domain }]);
-      
-      if (error) {
-        console.error('Supabase error:', error);
-        return false;
-      }
-      return true;
-    } catch (error) {
-      console.error('Error storing domain search:', error);
-      return false;
-    }
-  };
-
-  const storeCertificateData = async (domain: string, certData: CrtShEntry) => {
+  const storeDomainInCrt = async (domain: string) => {
     try {
       const { error } = await supabase
         .from('crt')
         .insert([{
           domain,
-          common_name: certData.common_name || domain,
-          issuer_name: certData.issuer_name || 'Unknown',
-          not_before: certData.not_before || new Date().toISOString(),
-          not_after: certData.not_after || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+          common_name: domain,
+          issuer_name: 'Manual Entry',
+          not_before: new Date().toISOString(),
+          not_after: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
         }]);
       
       if (error) {
-        console.error('Error storing certificate data:', error);
+        console.error('Error storing domain in crt table:', error);
         return false;
       }
       return true;
     } catch (error) {
-      console.error('Error storing certificate data:', error);
+      console.error('Error storing domain in crt table:', error);
       return false;
     }
   };
@@ -109,10 +88,10 @@ export const SubdomainScanner = () => {
     setSubdomains([]);
 
     try {
-      // Store the domain search first
-      const stored = await storeDomainSearch(domain);
+      // Store the domain in crt table first
+      const stored = await storeDomainInCrt(domain);
       if (!stored) {
-        console.warn('Failed to store domain search, but continuing with scan');
+        console.warn('Failed to store domain in crt table, but continuing with scan');
       }
 
       const [crtResponse, hackertargetResponse] = await Promise.all([
@@ -122,11 +101,6 @@ export const SubdomainScanner = () => {
 
       const crtData = await crtResponse.json() as CrtShEntry[];
       const hackertargetData = await hackertargetResponse.text();
-
-      // Store certificate data
-      for (const cert of crtData) {
-        await storeCertificateData(domain, cert);
-      }
 
       const crtSubdomains = crtData.map((entry: CrtShEntry) => entry.name_value.replace(/\*\./g, ""));
       const hackertargetSubdomains = hackertargetData.split("\n").map(line => line.split(",")[0]);
