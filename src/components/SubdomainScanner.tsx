@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/use-toast";
-import { Loader2, Copy, Heart, Search } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Link2, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface CrtShEntry {
@@ -12,34 +13,11 @@ interface CrtShEntry {
 export const SubdomainScanner = () => {
   const [domain, setDomain] = useState("");
   const [subdomains, setSubdomains] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  const validateDomain = (domain: string) => {
-    const pattern = /^[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}$/;
-    return pattern.test(domain);
-  };
-
-  const copyToClipboard = async () => {
-    try {
-      await navigator.clipboard.writeText(subdomains.join("\n"));
-      toast({
-        title: "Copied!",
-        description: "Subdomains copied to clipboard",
-      });
-    } catch (err) {
-      toast({
-        title: "Error",
-        description: "Failed to copy to clipboard",
-        variant: "destructive",
-      });
-    }
-  };
+  const [isScanning, setIsScanning] = useState(false);
 
   const fetchWithProxy = async (url: string) => {
     try {
-      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-      const response = await fetch(proxyUrl);
-      
+      const response = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -64,47 +42,47 @@ export const SubdomainScanner = () => {
     try {
       const { error } = await supabase
         .from('crt')
-        .insert([{
-          domain,
-          common_name: domain,
-          issuer_name: 'Manual Entry',
-          not_before: new Date().toISOString(),
-          not_after: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-        }]);
-      
+        .insert([
+          {
+            domain,
+            common_name: domain,
+            issuer_name: 'Unknown',
+            not_before: new Date().toISOString(),
+            not_after: new Date().toISOString(),
+          },
+        ]);
+
       if (error) {
-        console.error('Error storing domain in crt table:', error);
-        return false;
+        console.error('Error storing domain:', error);
       }
-      return true;
     } catch (error) {
-      console.error('Error storing domain in crt table:', error);
-      return false;
+      console.error('Failed to store domain:', error);
     }
+  };
+
+  const validateDomain = (domain: string) => {
+    const domainRegex = /^(?!:\/\/)([a-zA-Z0-9-_]+\.)*[a-zA-Z0-9][a-zA-Z0-9-_]+\.[a-zA-Z]{2,11}?$/;
+    return domainRegex.test(domain);
   };
 
   const scanSubdomains = async () => {
     if (!validateDomain(domain)) {
       toast({
         title: "Invalid Domain",
-        description: "Please enter a valid domain (e.g., example.com)",
+        description: "Please enter a valid domain name (e.g., example.com)",
         variant: "destructive",
       });
       return;
     }
 
-    setLoading(true);
+    setIsScanning(true);
     setSubdomains([]);
 
     try {
-      // Store the domain in crt table first
-      const stored = await storeDomainInCrt(domain);
-      if (!stored) {
-        console.warn('Failed to store domain in crt table, but continuing with scan');
-      }
+      await storeDomainInCrt(domain);
 
       const [crtResponse, hackertargetResponse] = await Promise.all([
-        fetchWithProxy(`https://crt.sh/?q=%25.${domain}&output=json`),
+        fetchWithProxy(`https://crt.sh/?q=${domain}&output=json`),
         fetchWithProxy(`https://api.hackertarget.com/hostsearch/?q=${domain}`),
       ]);
 
@@ -150,81 +128,72 @@ export const SubdomainScanner = () => {
         variant: "destructive",
       });
     } finally {
-      setLoading(false);
+      setIsScanning(false);
     }
   };
 
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    scanSubdomains();
+  };
+
   return (
-    <div className="min-h-screen bg-scanner-dark text-scanner-light p-8">
-      <div className="max-w-4xl mx-auto space-y-8">
-        <div className="text-center space-y-4">
-          <h1 className="text-4xl font-bold text-scanner-accent">Subdomain Scanner</h1>
-          <p className="text-lg">Enter a domain to discover its subdomains</p>
-        </div>
-
-        <div className="flex gap-4">
-          <Input
-            type="text"
-            placeholder="example.com"
-            value={domain}
-            onChange={(e) => setDomain(e.target.value)}
-            className="bg-scanner-dark border-scanner-light/20 text-scanner-light"
-          />
-          <Button
-            onClick={scanSubdomains}
-            disabled={loading}
-            className="bg-scanner-accent hover:bg-scanner-accent/90 text-scanner-dark"
-          >
-            {loading ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Search className="mr-2 h-4 w-4" />
-            )}
-            Scan
-          </Button>
-        </div>
-
-        {subdomains.length > 0 && (
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <h2 className="text-xl font-semibold">
-                Found {subdomains.length} subdomains
-              </h2>
+    <div className="container mx-auto px-4 py-8">
+      <div className="max-w-4xl mx-auto">
+        <Card className="p-6 bg-scanner-dark text-scanner-light">
+          <h1 className="text-3xl font-bold mb-6 text-scanner-accent">Domain Discovery Hub</h1>
+          <form onSubmit={handleSubmit} className="mb-8">
+            <div className="flex gap-4">
+              <Input
+                type="text"
+                value={domain}
+                onChange={(e) => setDomain(e.target.value)}
+                placeholder="Enter domain (e.g., example.com)"
+                className="flex-1 bg-gray-800 border-gray-700 text-white"
+              />
               <Button
-                onClick={copyToClipboard}
-                className="bg-scanner-accent hover:bg-scanner-accent/90 text-scanner-dark flex items-center gap-2"
+                type="submit"
+                disabled={isScanning}
+                className="bg-scanner-accent hover:bg-blue-600"
               >
-                <Copy className="h-4 w-4" />
-                Copy Results
+                {isScanning ? (
+                  "Scanning..."
+                ) : (
+                  <>
+                    <Search className="w-4 h-4 mr-2" />
+                    Scan
+                  </>
+                )}
               </Button>
             </div>
-            <div className="bg-scanner-dark border border-scanner-light/20 rounded-lg p-4">
-              <div className="font-mono max-h-96 overflow-y-auto space-y-2">
+          </form>
+
+          {subdomains.length > 0 && (
+            <div className="space-y-4">
+              <h2 className="text-xl font-semibold text-scanner-accent">
+                Found {subdomains.length} Subdomains
+              </h2>
+              <div className="grid gap-2">
                 {subdomains.map((subdomain, index) => (
                   <div
                     key={index}
-                    className="p-2 hover:bg-scanner-light/5 rounded transition-colors"
+                    className="flex items-center gap-2 p-2 rounded bg-gray-800 hover:bg-gray-700"
                   >
-                    {subdomain}
+                    <Link2 className="w-4 h-4 text-scanner-accent" />
+                    <a
+                      href={`https://${subdomain}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-scanner-light hover:text-scanner-accent transition-colors"
+                    >
+                      {subdomain}
+                    </a>
                   </div>
                 ))}
               </div>
             </div>
-          </div>
-        )}
-
-        <div className="text-center text-sm text-scanner-light/60 pt-8">
-          Created by{" "}
-          <a
-            href="https://www.hackwithsingh.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-scanner-accent hover:underline"
-          >
-            www.hackwithsingh.com
-          </a>{" "}
-          <Heart className="inline-block h-4 w-4 text-red-500 animate-pulse" />
-        </div>
+          )}
+        </Card>
       </div>
     </div>
   );
