@@ -6,9 +6,14 @@ import { Heart } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Link2 } from "lucide-react";
 
+interface CrtEntry {
+  domain: string;
+  common_name: string;
+}
+
 export const SubdomainScanner = () => {
   const [domain, setDomain] = useState("");
-  const [subdomains, setSubdomains] = useState<string[]>([]);
+  const [subdomains, setSubdomains] = useState<CrtEntry[]>([]);
   const { toast } = useToast();
 
   const handleScan = async () => {
@@ -17,16 +22,20 @@ export const SubdomainScanner = () => {
       return;
     }
 
-    // Simulate a subdomain scan
+    // Query the crt table instead of subdomains
     const results = await supabase
-      .from("subdomains")
-      .select("name")
+      .from("crt")
+      .select("domain, common_name")
       .ilike("domain", `%${domain}%`);
 
-    if (results.data) {
-      setSubdomains(results.data.map((item) => item.name));
+    if (results.data && results.data.length > 0) {
+      setSubdomains(results.data);
     } else {
-      toast({ title: "Scan failed", description: "Could not retrieve subdomains." });
+      toast({ 
+        title: "No results found", 
+        description: "No subdomains were found for this domain." 
+      });
+      setSubdomains([]);
     }
   };
 
@@ -50,9 +59,15 @@ export const SubdomainScanner = () => {
 
       <div className="space-y-2">
         {subdomains.length > 0 && (
-          <ul>
-            {subdomains.map((subdomain) => (
-              <li key={subdomain}>{subdomain}</li>
+          <ul className="space-y-2">
+            {subdomains.map((entry) => (
+              <li 
+                key={entry.domain} 
+                className="flex items-center gap-2 p-2 rounded hover:bg-gray-50"
+              >
+                <Link2 className="w-4 h-4 text-gray-500" />
+                <span>{entry.domain}</span>
+              </li>
             ))}
           </ul>
         )}
