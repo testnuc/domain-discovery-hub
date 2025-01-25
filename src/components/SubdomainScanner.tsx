@@ -114,13 +114,6 @@ export const SubdomainScanner = () => {
       </div>
 
       <div className="flex items-center justify-center gap-1 mt-8 text-sm text-muted-foreground">
-        Created with{" "}
-        <Heart
-          className="inline-block w-4 h-4 mx-1 animate-pulse"
-          fill="#ea384c"
-          color="#ea384c"
-        />{" "}
-        by{" "}
         <a
           href="https://www.hackwithsingh.com"
           target="_blank"
@@ -129,6 +122,11 @@ export const SubdomainScanner = () => {
         >
           www.hackwithsingh.com
         </a>
+        <Heart
+          className="inline-block w-4 h-4 mx-1 animate-pulse"
+          fill="#ea384c"
+          color="#ea384c"
+        />
       </div>
     </div>
   );
