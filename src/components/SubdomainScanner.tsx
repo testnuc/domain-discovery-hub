@@ -2,40 +2,86 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Heart } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { Link2 } from "lucide-react";
+import { Heart, Link2 } from "lucide-react";
 
-interface CrtEntry {
+interface Subdomain {
   domain: string;
-  common_name: string;
 }
 
 export const SubdomainScanner = () => {
   const [domain, setDomain] = useState("");
-  const [subdomains, setSubdomains] = useState<CrtEntry[]>([]);
+  const [subdomains, setSubdomains] = useState<Subdomain[]>([]);
   const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(false);
+
+  const fetchCrtShDomains = async (domain: string) => {
+    try {
+      const response = await fetch(`https://crt.sh/?q=%25.${domain}&output=json`);
+      if (!response.ok) throw new Error('Failed to fetch from crt.sh');
+      const data = await response.json();
+      return data.map((entry: { name_value: string }) => ({
+        domain: entry.name_value.replace('*.', '')
+      }));
+    } catch (error) {
+      console.error("Error fetching from crt.sh:", error);
+      return [];
+    }
+  };
+
+  const fetchHackerTargetDomains = async (domain: string) => {
+    try {
+      const response = await fetch(`https://api.hackertarget.com/hostsearch/?q=${domain}`);
+      if (!response.ok) throw new Error('Failed to fetch from HackerTarget');
+      const text = await response.text();
+      if (!text.trim()) return [];
+      return text.split('\n')
+        .map(line => ({
+          domain: line.split(',')[0]
+        }));
+    } catch (error) {
+      console.error("Error fetching from HackerTarget:", error);
+      return [];
+    }
+  };
 
   const handleScan = async () => {
     if (!domain) {
-      toast({ title: "Please enter a domain", description: "Domain cannot be empty." });
+      toast({ 
+        title: "Please enter a domain", 
+        description: "Domain cannot be empty." 
+      });
       return;
     }
 
-    // Query the crt table instead of subdomains
-    const results = await supabase
-      .from("crt")
-      .select("domain, common_name")
-      .ilike("domain", `%${domain}%`);
+    setIsLoading(true);
+    try {
+      const [crtResults, hackerTargetResults] = await Promise.all([
+        fetchCrtShDomains(domain),
+        fetchHackerTargetDomains(domain)
+      ]);
 
-    if (results.data && results.data.length > 0) {
-      setSubdomains(results.data);
-    } else {
+      // Combine and deduplicate results
+      const allDomains = [...crtResults, ...hackerTargetResults];
+      const uniqueDomains = Array.from(new Set(
+        allDomains.map(d => d.domain)
+      )).map(domain => ({ domain }));
+
+      if (uniqueDomains.length === 0) {
+        toast({ 
+          title: "No results found", 
+          description: "No subdomains were found for this domain." 
+        });
+      }
+
+      setSubdomains(uniqueDomains);
+    } catch (error) {
+      console.error("Error scanning domains:", error);
       toast({ 
-        title: "No results found", 
-        description: "No subdomains were found for this domain." 
+        title: "Error scanning domains", 
+        description: "An error occurred while scanning for subdomains." 
       });
-      setSubdomains([]);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -50,19 +96,24 @@ export const SubdomainScanner = () => {
 
       <div className="flex flex-col space-y-4">
         <Input
-          placeholder="Enter domain"
+          placeholder="Enter domain (e.g. example.com)"
           value={domain}
           onChange={(e) => setDomain(e.target.value)}
         />
-        <Button onClick={handleScan}>Scan</Button>
+        <Button 
+          onClick={handleScan}
+          disabled={isLoading}
+        >
+          {isLoading ? "Scanning..." : "Scan"}
+        </Button>
       </div>
 
       <div className="space-y-2">
         {subdomains.length > 0 && (
           <ul className="space-y-2">
-            {subdomains.map((entry) => (
+            {subdomains.map((entry, index) => (
               <li 
-                key={entry.domain} 
+                key={`${entry.domain}-${index}`}
                 className="flex items-center gap-2 p-2 rounded hover:bg-gray-50"
               >
                 <Link2 className="w-4 h-4 text-gray-500" />
