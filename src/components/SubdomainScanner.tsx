@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Heart, Link2 } from "lucide-react";
+import { Heart, Link2, Copy, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface Subdomain {
@@ -14,6 +14,7 @@ export const SubdomainScanner = () => {
   const [subdomains, setSubdomains] = useState<Subdomain[]>([]);
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const storeDomainSearch = async (domain: string) => {
     try {
@@ -23,6 +24,17 @@ export const SubdomainScanner = () => {
     } catch (error) {
       console.error("Error storing domain search:", error);
     }
+  };
+
+  const handleCopy = () => {
+    const textToCopy = subdomains.map(entry => entry.domain).join('\n');
+    navigator.clipboard.writeText(textToCopy);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    toast({
+      title: "Copied!",
+      description: "Subdomains have been copied to clipboard."
+    });
   };
 
   const handleScan = async () => {
@@ -92,21 +104,44 @@ export const SubdomainScanner = () => {
         </Button>
       </div>
 
-      <div className="space-y-2">
-        {subdomains.length > 0 && (
-          <ul className="space-y-2">
-            {subdomains.map((entry, index) => (
-              <li 
-                key={`${entry.domain}-${index}`}
-                className="flex items-center gap-2 p-2 rounded hover:bg-gray-50"
-              >
-                <Link2 className="w-4 h-4 text-gray-500" />
-                <span>{entry.domain}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      {subdomains.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-lg font-semibold">Results</h2>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCopy}
+              className="gap-2"
+            >
+              {copied ? (
+                <>
+                  <CheckCircle2 className="w-4 h-4" />
+                  Copied!
+                </>
+              ) : (
+                <>
+                  <Copy className="w-4 h-4" />
+                  Copy All
+                </>
+              )}
+            </Button>
+          </div>
+          <div className="bg-scanner-dark text-scanner-light p-4 rounded-lg font-mono text-sm overflow-x-auto">
+            <ul className="space-y-1">
+              {subdomains.map((entry, index) => (
+                <li 
+                  key={`${entry.domain}-${index}`}
+                  className="flex items-center gap-2 hover:text-scanner-accent transition-colors"
+                >
+                  <Link2 className="w-4 h-4 shrink-0" />
+                  <span className="break-all">{entry.domain}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center justify-center gap-1 mt-8 text-sm text-muted-foreground">
         <a
