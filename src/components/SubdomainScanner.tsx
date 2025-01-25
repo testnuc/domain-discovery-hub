@@ -5,6 +5,10 @@ import { toast } from "@/components/ui/use-toast";
 import { Loader2, Copy, Heart, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
+interface CrtShEntry {
+  name_value: string;
+}
+
 export const SubdomainScanner = () => {
   const [domain, setDomain] = useState("");
   const [subdomains, setSubdomains] = useState<string[]>([]);
@@ -32,12 +36,19 @@ export const SubdomainScanner = () => {
   };
 
   const fetchWithProxy = async (url: string) => {
-    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-    const response = await fetch(proxyUrl);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+    try {
+      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+      const response = await fetch(proxyUrl);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      return response;
+    } catch (error) {
+      console.error('Proxy fetch error:', error);
+      throw new Error(`Failed to fetch from ${url}`);
     }
-    return response;
   };
 
   const storeDomainSearch = async (domain: string) => {
@@ -46,10 +57,14 @@ export const SubdomainScanner = () => {
         .from('domain_searches')
         .insert([{ domain }]);
       
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error:', error);
+        return false;
+      }
+      return true;
     } catch (error) {
       console.error('Error storing domain search:', error);
-      // We don't show this error to the user as it's not critical to the main functionality
+      return false;
     }
   };
 
@@ -68,17 +83,20 @@ export const SubdomainScanner = () => {
 
     try {
       // Store the domain search first
-      await storeDomainSearch(domain);
+      const stored = await storeDomainSearch(domain);
+      if (!stored) {
+        console.warn('Failed to store domain search, but continuing with scan');
+      }
 
       const [crtResponse, hackertargetResponse] = await Promise.all([
         fetchWithProxy(`https://crt.sh/?q=%25.${domain}&output=json`),
         fetchWithProxy(`https://api.hackertarget.com/hostsearch/?q=${domain}`),
       ]);
 
-      const crtData = await crtResponse.json();
+      const crtData = await crtResponse.json() as CrtShEntry[];
       const hackertargetData = await hackertargetResponse.text();
 
-      const crtSubdomains = crtData.map((entry: any) => entry.name_value.replace(/\*\./g, ""));
+      const crtSubdomains = crtData.map((entry: CrtShEntry) => entry.name_value.replace(/\*\./g, ""));
       const hackertargetSubdomains = hackertargetData.split("\n").map(line => line.split(",")[0]);
 
       const allSubdomains = [...new Set([...crtSubdomains, ...hackertargetSubdomains])];
