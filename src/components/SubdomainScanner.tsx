@@ -39,21 +39,16 @@ export const SubdomainScanner = () => {
       // Store the domain search
       await storeDomainSearch(domain);
 
-      // Fetch subdomains using our Edge Function
-      const response = await fetch('/functions/v1/fetch-subdomains', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ domain })
+      // Use supabase.functions.invoke instead of fetch
+      const { data, error } = await supabase.functions.invoke('fetch-subdomains', {
+        body: { domain }
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch subdomains');
+      if (error) {
+        throw error;
       }
 
-      const data = await response.json();
-      const uniqueDomains = data.subdomains || [];
+      const uniqueDomains = data?.subdomains || [];
 
       if (uniqueDomains.length === 0) {
         toast({ 
