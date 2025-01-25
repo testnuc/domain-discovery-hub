@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Heart, Link2, Copy, CheckCircle2 } from "lucide-react";
+import { Heart, Copy, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface Subdomain {
@@ -18,9 +18,17 @@ export const SubdomainScanner = () => {
 
   const storeDomainSearch = async (domain: string) => {
     try {
-      await supabase
+      const { error } = await supabase
         .from('domain_searches')
         .insert([{ domain }]);
+      
+      if (error) {
+        console.error("Error storing domain search:", error);
+        toast({
+          title: "Error storing domain",
+          description: "Could not store the domain search."
+        });
+      }
     } catch (error) {
       console.error("Error storing domain search:", error);
     }
@@ -132,10 +140,9 @@ export const SubdomainScanner = () => {
               {subdomains.map((entry, index) => (
                 <li 
                   key={`${entry.domain}-${index}`}
-                  className="flex items-center gap-2 hover:text-scanner-accent transition-colors"
+                  className="break-all hover:text-scanner-accent transition-colors"
                 >
-                  <Link2 className="w-4 h-4 shrink-0" />
-                  <span className="break-all">{entry.domain}</span>
+                  {entry.domain}
                 </li>
               ))}
             </ul>
