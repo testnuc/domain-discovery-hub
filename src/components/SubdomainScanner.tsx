@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/use-toast";
-import { Loader2, Copy, Search } from "lucide-react";
+import { Loader2, Copy, Heart, Search } from "lucide-react";
 
 export const SubdomainScanner = () => {
   const [domain, setDomain] = useState("");
@@ -53,7 +53,6 @@ export const SubdomainScanner = () => {
     setSubdomains([]);
 
     try {
-      // Using proxy for both endpoints
       const [crtResponse, hackertargetResponse] = await Promise.all([
         fetchWithProxy(`https://crt.sh/?q=%25.${domain}&output=json`),
         fetchWithProxy(`https://api.hackertarget.com/hostsearch/?q=${domain}`),
@@ -65,7 +64,6 @@ export const SubdomainScanner = () => {
       const crtSubdomains = crtData.map((entry: any) => entry.name_value.replace(/\*\./g, ""));
       const hackertargetSubdomains = hackertargetData.split("\n").map(line => line.split(",")[0]);
 
-      // Combine and deduplicate results
       const allSubdomains = [...new Set([...crtSubdomains, ...hackertargetSubdomains])];
       
       setSubdomains(allSubdomains.filter(Boolean).sort());
@@ -124,11 +122,10 @@ export const SubdomainScanner = () => {
               </h2>
               <Button
                 onClick={copyToClipboard}
-                variant="outline"
-                className="border-scanner-light/20"
+                className="bg-scanner-accent hover:bg-scanner-accent/90 text-scanner-dark flex items-center gap-2"
               >
-                <Copy className="mr-2 h-4 w-4" />
-                Copy All
+                <Copy className="h-4 w-4" />
+                Copy Results
               </Button>
             </div>
             <div className="bg-scanner-dark border border-scanner-light/20 rounded-lg p-4">
@@ -145,6 +142,19 @@ export const SubdomainScanner = () => {
             </div>
           </div>
         )}
+
+        <div className="text-center text-sm text-scanner-light/60 pt-8">
+          Created by{" "}
+          <a
+            href="https://www.hackwithsingh.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-scanner-accent hover:underline"
+          >
+            www.hackwithsingh.com
+          </a>{" "}
+          <Heart className="inline-block h-4 w-4 text-red-500 animate-pulse" />
+        </div>
       </div>
     </div>
   );
